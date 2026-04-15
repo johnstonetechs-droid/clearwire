@@ -985,7 +985,7 @@ export default function ClearLineFieldApp() {
             <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
               <button onClick={() => { resetForm(); setView("dashboard"); }}
                 style={{ background:"none", border:"none", cursor:"pointer", color:"var(--n400)" }}>
-                <Icon name="back" size:20 color="var(--n400)"/>
+                <Icon name="back" size={20} color="var(--n400)"/>
               </button>
               <h2 style={{ fontFamily:"var(--font-display)", fontSize:22, color:"#fff" }}>
                 New Report
@@ -1034,7 +1034,7 @@ export default function ClearLineFieldApp() {
                   </>
                 ) : gps ? (
                   <>
-                    <Icon name="crosshair" size:20 color="var(--green)"/>
+                    <Icon name="crosshair" size={20} color="var(--green)"/>
                     <div style={{ flex:1 }}>
                       <div style={{ fontSize:13, fontWeight:600, color:"var(--green)" }}>
                         GPS acquired
