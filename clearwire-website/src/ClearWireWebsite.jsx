@@ -868,26 +868,22 @@ export default function ClearWireWebsite(){
             </p>
           </div>
           <div style={{display:"flex",gap:8,justifyContent:"center",marginBottom:48,flexWrap:"wrap"}}>
-            {Object.entries(roles).map(([key,r])=>(
-              <button key={key} onClick={()=>setActiveTab(key)}
-                className="tab-btn"
-                style={{"--active-color":r.color,"--active-bg":`${r.color}18`}
-                data-active={activeTab===key}
-                // inline override for active
-                {...(activeTab===key?{style:{
-                  padding:"10px 22px",borderRadius:9999,
-                  border:`1.5px solid ${r.color}`,background:`${r.color}18`,color:r.color,
-                  fontFamily:"var(--font-body)",fontSize:14,fontWeight:700,cursor:"pointer",
-                  transition:"all .2s",letterSpacing:".02em",whiteSpace:"nowrap"
-                }}:{style:{
-                  padding:"10px 22px",borderRadius:9999,
-                  border:"1.5px solid rgba(255,255,255,.12)",background:"transparent",color:T.n400,
-                  fontFamily:"var(--font-body)",fontSize:14,fontWeight:700,cursor:"pointer",
-                  transition:"all .2s",letterSpacing:".02em",whiteSpace:"nowrap"
-                }})}>
-                {r.label}
-              </button>
-            ))}
+            {Object.entries(roles).map(([key,r])=>{
+              const isActive = activeTab===key;
+              return(
+                <button key={key} onClick={()=>setActiveTab(key)}
+                  style={{
+                    padding:"10px 22px",borderRadius:9999,cursor:"pointer",
+                    border:isActive?`1.5px solid ${r.color}`:"1.5px solid rgba(255,255,255,.12)",
+                    background:isActive?`${r.color}18`:"transparent",
+                    color:isActive?r.color:T.n400,
+                    fontFamily:"var(--font-body)",fontSize:14,fontWeight:700,
+                    transition:"all .2s",letterSpacing:".02em",whiteSpace:"nowrap"
+                  }}>
+                  {r.label}
+                </button>
+              );
+            })}
           </div>
           {Object.entries(roles).map(([key,r])=>activeTab===key&&(
             <div key={key} className="two-col"
