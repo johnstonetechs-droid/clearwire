@@ -871,7 +871,7 @@ export default function ClearWireWebsite(){
             {Object.entries(roles).map(([key,r])=>(
               <button key={key} onClick={()=>setActiveTab(key)}
                 className="tab-btn"
-                style={{"--active-color":r.color,"--active-bg":`${r.color}18`} as any}
+                style={{"--active-color":r.color,"--active-bg":`${r.color}18`}
                 data-active={activeTab===key}
                 // inline override for active
                 {...(activeTab===key?{style:{
@@ -1110,8 +1110,8 @@ export default function ClearWireWebsite(){
             City or municipality?{" "}
             <span style={{color:T.blue400,cursor:"pointer",fontWeight:600}}
               onClick={()=>scrollTo("contact")}
-              onMouseEnter={e=>(e.currentTarget as HTMLElement).style.textDecoration="underline"}
-              onMouseLeave={e=>(e.currentTarget as HTMLElement).style.textDecoration="none"}>
+              onMouseEnter={e=>e.currentTarget.style.textDecoration="underline"}
+              onMouseLeave={e=>e.currentTarget.style.textDecoration="none"}>
               Explore our municipal partnership program →
             </span>
           </p>
@@ -1216,8 +1216,8 @@ export default function ClearWireWebsite(){
                       target={l.url.startsWith("http")?"_blank":undefined}
                       rel={l.url.startsWith("http")?"noopener":undefined}
                       style={{fontSize:13,color:T.n600,textDecoration:"none",transition:"color .15s"}}
-                      onMouseEnter={e=>(e.currentTarget as HTMLAnchorElement).style.color="#fff"}
-                      onMouseLeave={e=>(e.currentTarget as HTMLAnchorElement).style.color=T.n600}>{l.label}</a>
+                      onMouseEnter={e=>e.currentTarget.style.color="#fff"}
+                      onMouseLeave={e=>e.currentTarget.style.color=T.n600}>{l.label}</a>
                   ))}
                 </div>
               </div>
@@ -1236,8 +1236,8 @@ export default function ClearWireWebsite(){
               <button onClick={openSignUp} style={{background:"none",border:"none",
                 color:T.n600,fontSize:12,cursor:"pointer",fontFamily:"var(--font-body)",
                 textDecoration:"underline",textDecorationStyle:"dotted"}}
-                onMouseEnter={e=>(e.currentTarget as HTMLButtonElement).style.color="#fff"}
-                onMouseLeave={e=>(e.currentTarget as HTMLButtonElement).style.color=T.n600}>
+                onMouseEnter={e=>e.currentTarget.style.color="#fff"}
+                onMouseLeave={e=>e.currentTarget.style.color=T.n600}>
                 Create account
               </button>
             </div>
@@ -1250,10 +1250,10 @@ export default function ClearWireWebsite(){
 }
 
 // ─── Contact form (inline component) ─────────────────────────────────────────
-function ContactForm({onDemoClick}:{onDemoClick:()=>void}){
+function ContactForm({onDemoClick}){
   const [form,setForm]=useState({name:"",email:"",org:"",message:""});
   const [status,setStatus]=useState("idle");
-  const set=(k:string,v:string)=>setForm((f:any)=>({...f,[k]:v}));
+  const set=(k,v)=>setForm(f=>({...f,[k]:v}));
   const valid=form.name&&form.email&&form.message;
 
   const handleSubmit=async()=>{
