@@ -5,14 +5,14 @@ const config: ExpoConfig = {
   slug: 'clearwire-field',
   version: '0.0.1',
   orientation: 'portrait',
-  icon: './assets/icon.png',
+  // icon: './assets/icon.png',  // TODO: drop real PNG into apps/field-native/assets/
   scheme: 'clearwire',
   userInterfaceStyle: 'dark',
-  splash: {
-    image: './assets/splash.png',
-    resizeMode: 'contain',
-    backgroundColor: '#0B0F14',
-  },
+  // splash: {
+  //   image: './assets/splash.png',
+  //   resizeMode: 'contain',
+  //   backgroundColor: '#0B0F14',
+  // },
   ios: {
     supportsTablet: true,
     bundleIdentifier: 'com.clearwire.field',
@@ -27,10 +27,10 @@ const config: ExpoConfig = {
   },
   android: {
     package: 'com.clearwire.field',
-    adaptiveIcon: {
-      foregroundImage: './assets/adaptive-icon.png',
-      backgroundColor: '#0B0F14',
-    },
+    // adaptiveIcon: {
+    //   foregroundImage: './assets/adaptive-icon.png',
+    //   backgroundColor: '#0B0F14',
+    // },
     permissions: [
       'android.permission.CAMERA',
       'android.permission.ACCESS_FINE_LOCATION',
@@ -39,7 +39,7 @@ const config: ExpoConfig = {
   },
   web: {
     bundler: 'metro',
-    favicon: './assets/favicon.png',
+    // favicon: './assets/favicon.png',
   },
   plugins: [
     'expo-router',
