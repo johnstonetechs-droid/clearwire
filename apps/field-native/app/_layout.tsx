@@ -3,6 +3,9 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { T } from '@clearwire/brand';
 
+// Side-effect import: sets up foreground notification handler.
+import '../lib/pushNotifications';
+
 export default function RootLayout() {
   return (
     <SafeAreaProvider>

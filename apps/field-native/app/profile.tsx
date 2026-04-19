@@ -18,6 +18,10 @@ import type { ProRole } from '@clearwire/supabase';
 
 import { supabase } from '../lib/supabase';
 import { useAuth, signOut } from '../lib/auth';
+import {
+  registerForPushNotificationsAsync,
+  sendTestPush,
+} from '../lib/pushNotifications';
 
 const ROLES: { value: ProRole; label: string }[] = [
   { value: 'contractor', label: 'Contractor' },
@@ -32,6 +36,7 @@ type Profile = {
   role: ProRole | null;
   alert_radius_miles: number;
   last_location_update: string | null;
+  expo_push_token: string | null;
 };
 
 export default function ProfileScreen() {
@@ -46,6 +51,9 @@ export default function ProfileScreen() {
   const [role, setRole] = useState<ProRole | null>(null);
   const [alertRadius, setAlertRadius] = useState(5);
   const [lastLocationUpdate, setLastLocationUpdate] = useState<string | null>(null);
+  const [pushToken, setPushToken] = useState<string | null>(null);
+  const [enablingAlerts, setEnablingAlerts] = useState(false);
+  const [testingPush, setTestingPush] = useState(false);
 
   useEffect(() => {
     if (auth.state === 'signed-out') {
@@ -58,7 +66,9 @@ export default function ProfileScreen() {
     (async () => {
       const { data, error } = await supabase
         .from('pro_profiles')
-        .select('display_name, company, role, alert_radius_miles, last_location_update')
+        .select(
+          'display_name, company, role, alert_radius_miles, last_location_update, expo_push_token'
+        )
         .eq('id', auth.user.id)
         .maybeSingle();
 
@@ -69,6 +79,7 @@ export default function ProfileScreen() {
         setRole(p.role);
         setAlertRadius(Number(p.alert_radius_miles ?? 5));
         setLastLocationUpdate(p.last_location_update);
+        setPushToken(p.expo_push_token);
       }
       setLoading(false);
     })();
@@ -121,6 +132,56 @@ export default function ProfileScreen() {
       Alert.alert('Error', e?.message ?? String(e));
     } finally {
       setUpdatingLocation(false);
+    }
+  }
+
+  async function handleEnableAlerts() {
+    if (auth.state !== 'signed-in') return;
+    setEnablingAlerts(true);
+    const result = await registerForPushNotificationsAsync();
+    if (!result.ok) {
+      setEnablingAlerts(false);
+      Alert.alert('Could not enable alerts', result.reason);
+      return;
+    }
+    const { error } = await supabase.from('pro_profiles').upsert(
+      { id: auth.user.id, expo_push_token: result.token },
+      { onConflict: 'id' }
+    );
+    setEnablingAlerts(false);
+    if (error) {
+      Alert.alert('Save failed', error.message);
+      return;
+    }
+    setPushToken(result.token);
+  }
+
+  async function handleDisableAlerts() {
+    if (auth.state !== 'signed-in') return;
+    const { error } = await supabase
+      .from('pro_profiles')
+      .update({ expo_push_token: null })
+      .eq('id', auth.user.id);
+    if (error) {
+      Alert.alert('Update failed', error.message);
+      return;
+    }
+    setPushToken(null);
+  }
+
+  async function handleTestPush() {
+    if (!pushToken) return;
+    setTestingPush(true);
+    const err = await sendTestPush(pushToken, 'Proximity alerts are working.');
+    setTestingPush(false);
+    if (err) {
+      Alert.alert('Test failed', err);
+    } else {
+      Alert.alert(
+        'Test sent',
+        'The push is on its way — watch for it in the next few seconds. ' +
+          'If the app is foregrounded, you should see a banner.'
+      );
     }
   }
 
@@ -262,6 +323,50 @@ export default function ProfileScreen() {
 
         <View style={styles.divider} />
 
+        <Text style={styles.sectionLabel}>Proximity alerts</Text>
+        {pushToken ? (
+          <>
+            <View style={styles.alertStatus}>
+              <View style={styles.alertDot} />
+              <Text style={styles.alertStatusText}>Alerts enabled on this device</Text>
+            </View>
+            <Pressable
+              onPress={handleTestPush}
+              disabled={testingPush}
+              style={[styles.secondaryBtn, testingPush && styles.primaryBtnDisabled]}
+            >
+              {testingPush ? (
+                <ActivityIndicator color={T.text} />
+              ) : (
+                <Text style={styles.secondaryBtnText}>Send test push</Text>
+              )}
+            </Pressable>
+            <Pressable onPress={handleDisableAlerts} style={styles.linkBtn}>
+              <Text style={styles.linkBtnText}>Disable alerts on this device</Text>
+            </Pressable>
+          </>
+        ) : (
+          <>
+            <Text style={styles.sectionHelp}>
+              Get a push notification when a report is within {alertRadius} mi of your last
+              known location.
+            </Text>
+            <Pressable
+              onPress={handleEnableAlerts}
+              disabled={enablingAlerts}
+              style={[styles.primaryBtn, enablingAlerts && styles.primaryBtnDisabled]}
+            >
+              {enablingAlerts ? (
+                <ActivityIndicator color={T.bg} />
+              ) : (
+                <Text style={styles.primaryBtnText}>Enable proximity alerts</Text>
+              )}
+            </Pressable>
+          </>
+        )}
+
+        <View style={styles.divider} />
+
         <Pressable onPress={handleSignOut} style={styles.signOutBtn}>
           <Text style={styles.signOutText}>Sign out</Text>
         </Pressable>
@@ -377,4 +482,23 @@ const styles = StyleSheet.create({
   secondaryBtnText: { color: T.text, fontSize: T.font.md, fontWeight: '600' },
   signOutBtn: { alignItems: 'center', paddingVertical: T.space.md },
   signOutText: { color: T.danger, fontSize: T.font.md, fontWeight: '600' },
+  alertStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: T.space.sm,
+    backgroundColor: T.surface,
+    padding: T.space.md,
+    borderRadius: T.radius.md,
+    borderWidth: 1,
+    borderColor: T.border,
+  },
+  alertDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: T.success,
+  },
+  alertStatusText: { color: T.text, fontSize: T.font.sm },
+  linkBtn: { alignItems: 'center', paddingVertical: T.space.sm },
+  linkBtnText: { color: T.textMuted, fontSize: T.font.sm },
 });
