@@ -4,9 +4,12 @@ import { useRouter } from 'expo-router';
 import { T } from '@clearwire/brand';
 
 import { Logo } from '../components/Logo';
+import { useAuth } from '../lib/auth';
 
 export default function Home() {
   const router = useRouter();
+  const auth = useAuth();
+  const signedIn = auth.state === 'signed-in';
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -40,6 +43,18 @@ export default function Home() {
           ]}
         >
           <Text style={styles.secondaryBtnText}>View nearby reports</Text>
+        </Pressable>
+
+        <Pressable
+          onPress={() => router.push(signedIn ? '/profile' : '/sign-in')}
+          style={({ pressed }) => [
+            styles.tertiaryBtn,
+            pressed && styles.tertiaryBtnPressed,
+          ]}
+        >
+          <Text style={styles.tertiaryBtnText}>
+            {signedIn ? 'My pro profile' : 'Sign in as a pro'}
+          </Text>
         </Pressable>
       </View>
 
@@ -116,6 +131,19 @@ const styles = StyleSheet.create({
   secondaryBtnText: {
     color: T.text,
     fontSize: T.font.md,
+    fontWeight: '600',
+  },
+  tertiaryBtn: {
+    paddingVertical: T.space.md,
+    alignItems: 'center',
+    borderRadius: T.radius.md,
+  },
+  tertiaryBtnPressed: {
+    backgroundColor: T.surface,
+  },
+  tertiaryBtnText: {
+    color: T.primary,
+    fontSize: T.font.sm,
     fontWeight: '600',
   },
   footer: {

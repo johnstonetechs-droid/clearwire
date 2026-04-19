@@ -24,7 +24,12 @@ export function createClearWireClient(config: {
       storage: config.storage as never,
       autoRefreshToken: true,
       persistSession: true,
-      detectSessionInUrl: false, // RN can't use URL detection
+      // RN can't use URL detection (no window.location). We manually
+      // handle the deep link and call exchangeCodeForSession(code).
+      detectSessionInUrl: false,
+      // PKCE is the recommended flow for mobile apps (more secure than
+      // implicit — the email link carries a short-lived code, not tokens).
+      flowType: 'pkce',
     },
   });
 }
