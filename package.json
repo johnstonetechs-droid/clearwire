@@ -3,15 +3,25 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "app": "pnpm --filter @clearwire/field-native start",
+    "app:dev-client": "pnpm --filter @clearwire/field-native start:dev-client",
     "app:android": "pnpm --filter @clearwire/field-native android",
-    "app:ios": "pnpm --filter @clearwire/field-native ios"
+    "app:ios": "pnpm --filter @clearwire/field-native ios",
+    "eas:login": "pnpm --filter @clearwire/field-native eas:login",
+    "eas:init": "pnpm --filter @clearwire/field-native eas:init",
+    "build:dev:android": "pnpm --filter @clearwire/field-native build:dev:android",
+    "build:dev:ios": "pnpm --filter @clearwire/field-native build:dev:ios",
+    "build:preview:android": "pnpm --filter @clearwire/field-native build:preview:android",
+    "build:production": "pnpm --filter @clearwire/field-native build:production"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.103.0",
@@ -27,6 +37,7 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.4.0",
+    "supabase": "^2.92.1",
     "vite": "^8.0.4"
   }
 }
