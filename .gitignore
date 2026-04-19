@@ -33,3 +33,12 @@ apps/*/web-build/
 
 # Claude Code local settings
 .claude/
+
+# Supabase CLI local state
+supabase/.temp/
+
+# Anything that looks like a secret drop zone
+**/webhook*secret*/
+*.secret
+secrets/
+
