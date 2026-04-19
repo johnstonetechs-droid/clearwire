@@ -9,7 +9,7 @@ import {
   FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import * as Location from 'expo-location';
 
@@ -48,6 +48,7 @@ type NearbyOutage = {
 
 export default function OutagesScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ outageId?: string }>();
   const [center, setCenter] = useState<Center | null>(null);
   const [locationDenied, setLocationDenied] = useState(false);
   const [outages, setOutages] = useState<NearbyOutage[] | null>(null);
@@ -120,6 +121,13 @@ export default function OutagesScreen() {
     });
     return map;
   }, [filtered]);
+
+  // Arrived with ?outageId=... from a tapped outage push → open sheet.
+  useEffect(() => {
+    if (!params.outageId || !outages) return;
+    const match = outages.find((o) => o.id === params.outageId);
+    if (match) setSelected(match);
+  }, [params.outageId, outages]);
 
   const html = useMemo(() => {
     if (!center || !outages) return null;

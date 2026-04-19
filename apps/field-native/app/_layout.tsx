@@ -11,16 +11,18 @@ import '../lib/pushNotifications';
 export default function RootLayout() {
   const router = useRouter();
 
-  // When a proximity-alert push is tapped, route to /map and pre-select
-  // the report so its sheet opens. reportId travels in the notification
-  // data set by the notify-nearby-pros Edge Function.
+  // Proximity-alert pushes carry either reportId (damage) or outageId
+  // (outage). Route to the matching screen with the id in the query so
+  // the detail sheet opens automatically.
   useEffect(() => {
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data as
-        | { reportId?: string }
+        | { reportId?: string; outageId?: string }
         | undefined;
       if (data?.reportId) {
         router.push({ pathname: '/map', params: { reportId: data.reportId } });
+      } else if (data?.outageId) {
+        router.push({ pathname: '/outages', params: { outageId: data.outageId } });
       }
     });
     return () => sub.remove();
