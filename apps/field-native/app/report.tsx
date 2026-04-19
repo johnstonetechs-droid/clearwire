@@ -52,6 +52,7 @@ export default function Report() {
   const [photos, setPhotos] = useState<PickedPhoto[]>([]);
   const [damageType, setDamageType] = useState<DamageType | null>(null);
   const [description, setDescription] = useState('');
+  const [affectedCompany, setAffectedCompany] = useState('');
   const [gpsLocation, setGpsLocation] = useState<{
     lat: number;
     lng: number;
@@ -196,6 +197,7 @@ export default function Report() {
         longitude: effectiveLocation.lng,
         accuracyMeters: effectiveLocation.accuracy ?? undefined,
         deviceId,
+        affectedCompany: affectedCompany.trim() || undefined,
       });
 
       if (!result.ok) {
@@ -355,6 +357,17 @@ export default function Report() {
         maxLength={280}
       />
 
+      <Text style={styles.label}>Affected company (optional)</Text>
+      <TextInput
+        value={affectedCompany}
+        onChangeText={setAffectedCompany}
+        placeholder="e.g. Spectrum, AT&T, FirstEnergy"
+        placeholderTextColor={T.textDim}
+        style={[styles.input, { minHeight: 44 }]}
+        autoCapitalize="words"
+        maxLength={80}
+      />
+
       <View style={styles.locationRow}>
         <Text style={styles.locationRowLabel}>{locationLabel(locationSource)}</Text>
         <Text style={styles.locationRowText}>
@@ -396,6 +409,7 @@ export default function Report() {
           setPhotos([]);
           setDamageType(null);
           setDescription('');
+          setAffectedCompany('');
           setLocationSource('gps');
           setCustomLocation(null);
           setStage('capture');
