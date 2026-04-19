@@ -23,3 +23,13 @@ dist-ssr
 *.sln
 *.sw?
 .env
+# Expo / field app
+.expo/
+apps/*/node_modules/
+packages/*/node_modules/
+apps/*/.env.local
+apps/*/dist/
+apps/*/web-build/
+
+# Claude Code local settings
+.claude/

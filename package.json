@@ -1,13 +1,17 @@
 {
-  "name": "clearline",
+  "name": "clearwire",
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "workspaces": ["apps/*", "packages/*"],
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "app": "pnpm --filter @clearwire/field-native start",
+    "app:android": "pnpm --filter @clearwire/field-native android",
+    "app:ios": "pnpm --filter @clearwire/field-native ios"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.103.0",
