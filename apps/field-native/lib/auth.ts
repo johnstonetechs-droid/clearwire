@@ -54,6 +54,10 @@ export async function exchangeCode(code: string) {
   return supabase.auth.exchangeCodeForSession(code);
 }
 
+export async function verifyEmailOtp(email: string, token: string) {
+  return supabase.auth.verifyOtp({ email, token, type: 'email' });
+}
+
 export async function signOut() {
   return supabase.auth.signOut();
 }

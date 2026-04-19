@@ -13,17 +13,19 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
 import { T } from '@clearwire/brand';
-import { signInWithMagicLink } from '../lib/auth';
+import { signInWithMagicLink, verifyEmailOtp } from '../lib/auth';
 
-type Stage = 'form' | 'sending' | 'sent' | 'error';
+type Stage = 'form' | 'sending' | 'sent' | 'verifying' | 'error';
 
 export default function SignIn() {
   const router = useRouter();
   const [email, setEmail] = useState('');
+  const [code, setCode] = useState('');
   const [stage, setStage] = useState<Stage>('form');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const codeValid = /^\d{6,10}$/.test(code);
 
   async function handleSend() {
     if (!emailValid) return;
@@ -36,6 +38,19 @@ export default function SignIn() {
       return;
     }
     setStage('sent');
+  }
+
+  async function handleVerifyCode() {
+    if (!codeValid) return;
+    setStage('verifying');
+    setErrorMsg(null);
+    const { error } = await verifyEmailOtp(email.trim(), code);
+    if (error) {
+      setErrorMsg(error.message);
+      setStage('sent');
+      return;
+    }
+    router.replace('/profile');
   }
 
   return (
@@ -57,19 +72,53 @@ export default function SignIn() {
             Enter your email and we'll send a sign-in link.
           </Text>
 
-          {stage === 'sent' ? (
+          {stage === 'sent' || stage === 'verifying' ? (
             <View style={styles.sentCard}>
               <Text style={styles.sentTitle}>Check your email</Text>
               <Text style={styles.sentBody}>
-                We sent a sign-in link to <Text style={styles.emailBold}>{email}</Text>.
-                Tap it on this phone to finish signing in.
+                We sent a code and a sign-in link to{' '}
+                <Text style={styles.emailBold}>{email}</Text>. Enter the code
+                below, or tap the link on this device.
               </Text>
+
+              <TextInput
+                value={code}
+                onChangeText={(v) => setCode(v.replace(/\D/g, '').slice(0, 10))}
+                placeholder="Enter code"
+                placeholderTextColor={T.textDim}
+                keyboardType="number-pad"
+                autoComplete="one-time-code"
+                style={styles.codeInput}
+                maxLength={10}
+                editable={stage !== 'verifying'}
+              />
+
+              {errorMsg && <Text style={styles.errorText}>{errorMsg}</Text>}
+
+              <Pressable
+                onPress={handleVerifyCode}
+                disabled={!codeValid || stage === 'verifying'}
+                style={[
+                  styles.primaryBtn,
+                  (!codeValid || stage === 'verifying') && styles.primaryBtnDisabled,
+                ]}
+              >
+                {stage === 'verifying' ? (
+                  <ActivityIndicator color={T.bg} />
+                ) : (
+                  <Text style={styles.primaryBtnText}>Verify code</Text>
+                )}
+              </Pressable>
+
               <Pressable
                 style={styles.secondaryBtn}
                 onPress={() => {
                   setStage('form');
                   setEmail('');
+                  setCode('');
+                  setErrorMsg(null);
                 }}
+                disabled={stage === 'verifying'}
               >
                 <Text style={styles.secondaryBtnText}>Use a different email</Text>
               </Pressable>
@@ -145,6 +194,18 @@ const styles = StyleSheet.create({
     padding: T.space.md,
     color: T.text,
     fontSize: T.font.md,
+  },
+  codeInput: {
+    backgroundColor: T.bg,
+    borderColor: T.border,
+    borderWidth: 1,
+    borderRadius: T.radius.md,
+    padding: T.space.md,
+    color: T.text,
+    fontSize: 24,
+    fontWeight: '700',
+    letterSpacing: 4,
+    textAlign: 'center',
   },
   errorText: { color: T.danger, fontSize: T.font.sm },
   primaryBtn: {
