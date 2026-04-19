@@ -22,4 +22,11 @@ config.resolver.nodeModulesPaths = [
 config.resolver.unstable_enableSymlinks = true;
 config.resolver.unstable_enablePackageExports = true;
 
+// 4. Ignore pnpm's atomic-install temp directories (<package>_tmp_<pid>_<n>).
+// Metro's file-map sometimes catches them mid-install and then crashes
+// trying to install an fs.watch on a path that's already been renamed.
+config.resolver.blockList = [
+  /[\\/]\.pnpm[\\/].*_tmp_\d+_\d+[\\/]/,
+];
+
 module.exports = config;

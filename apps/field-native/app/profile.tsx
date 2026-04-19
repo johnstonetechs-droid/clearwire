@@ -21,6 +21,8 @@ import { useAuth, signOut } from '../lib/auth';
 import {
   registerForPushNotificationsAsync,
   sendTestPush,
+  scheduleLocalTestNotification,
+  isExpoGo,
 } from '../lib/pushNotifications';
 
 const ROLES: { value: ProRole; label: string }[] = [
@@ -185,6 +187,15 @@ export default function ProfileScreen() {
     }
   }
 
+  async function handleLocalTest() {
+    setTestingPush(true);
+    const res = await scheduleLocalTestNotification();
+    setTestingPush(false);
+    if (!res.ok) {
+      Alert.alert('Test failed', res.reason);
+    }
+  }
+
   async function handleSignOut() {
     await signOut();
     router.replace('/');
@@ -324,6 +335,18 @@ export default function ProfileScreen() {
         <View style={styles.divider} />
 
         <Text style={styles.sectionLabel}>Proximity alerts</Text>
+
+        {isExpoGo && (
+          <View style={styles.warnBanner}>
+            <Text style={styles.warnBannerText}>
+              You're running in Expo Go. Remote push delivery was removed from
+              Expo Go in SDK 53 — build a dev client (eas build --profile
+              development) to receive real alerts. The local-test button below
+              verifies the notification UI works.
+            </Text>
+          </View>
+        )}
+
         {pushToken ? (
           <>
             <View style={styles.alertStatus}>
@@ -338,7 +361,7 @@ export default function ProfileScreen() {
               {testingPush ? (
                 <ActivityIndicator color={T.text} />
               ) : (
-                <Text style={styles.secondaryBtnText}>Send test push</Text>
+                <Text style={styles.secondaryBtnText}>Send test push (via Expo)</Text>
               )}
             </Pressable>
             <Pressable onPress={handleDisableAlerts} style={styles.linkBtn}>
@@ -364,6 +387,14 @@ export default function ProfileScreen() {
             </Pressable>
           </>
         )}
+
+        <Pressable
+          onPress={handleLocalTest}
+          disabled={testingPush}
+          style={[styles.secondaryBtn, testingPush && styles.primaryBtnDisabled]}
+        >
+          <Text style={styles.secondaryBtnText}>Test notification (local)</Text>
+        </Pressable>
 
         <View style={styles.divider} />
 
@@ -501,4 +532,16 @@ const styles = StyleSheet.create({
   alertStatusText: { color: T.text, fontSize: T.font.sm },
   linkBtn: { alignItems: 'center', paddingVertical: T.space.sm },
   linkBtnText: { color: T.textMuted, fontSize: T.font.sm },
+  warnBanner: {
+    backgroundColor: T.surfaceAlt,
+    borderColor: T.warning,
+    borderLeftWidth: 3,
+    borderRadius: T.radius.md,
+    padding: T.space.md,
+  },
+  warnBannerText: {
+    color: T.textMuted,
+    fontSize: T.font.sm,
+    lineHeight: 20,
+  },
 });

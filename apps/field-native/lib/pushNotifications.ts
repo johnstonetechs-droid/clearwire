@@ -1,6 +1,12 @@
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
+import Constants from 'expo-constants';
+
+// Expo removed remote-push functionality from Expo Go in SDK 53.
+// Detect Expo Go at runtime so the UI can explain why "Enable alerts"
+// won't yield a real push token until you switch to a dev build.
+export const isExpoGo = Constants.appOwnership === 'expo';
 
 // Show notifications that arrive while the app is foregrounded. Default
 // behavior in Expo is to suppress the banner — we want crews to see it.
@@ -52,12 +58,47 @@ export async function registerForPushNotificationsAsync(): Promise<RegisterResul
     return { ok: false, reason: 'Notification permission was denied.' };
   }
 
+  if (isExpoGo) {
+    return {
+      ok: false,
+      reason:
+        'Remote push tokens require a development build — Expo removed this from Expo Go in SDK 53. Local notifications still work for UI testing.',
+    };
+  }
+
   try {
     const res = await Notifications.getExpoPushTokenAsync();
     return { ok: true, token: res.data };
   } catch (e: any) {
     return { ok: false, reason: e?.message ?? 'Failed to get push token.' };
   }
+}
+
+/**
+ * Fire a notification locally (no Expo push service). Works in Expo Go
+ * and is useful for verifying the banner / permission / handler setup
+ * without a dev build.
+ */
+export async function scheduleLocalTestNotification() {
+  await setupAndroidChannel();
+  const existing = await Notifications.getPermissionsAsync();
+  let status = existing.status;
+  if (status !== 'granted') {
+    const req = await Notifications.requestPermissionsAsync();
+    status = req.status;
+  }
+  if (status !== 'granted') {
+    return { ok: false, reason: 'Notification permission was denied.' };
+  }
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: 'ClearWire test (local)',
+      body: 'This is a local notification — no server involved.',
+      sound: 'default',
+    },
+    trigger: null, // fire immediately
+  });
+  return { ok: true as const };
 }
 
 /**
