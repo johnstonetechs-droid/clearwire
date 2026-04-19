@@ -21,13 +21,19 @@ import { T } from '@clearwire/brand';
 import {
   type DamageType,
   DAMAGE_TYPE_LABELS,
+  DAMAGE_TYPE_ICONS,
 } from '@clearwire/supabase';
-import { submitReport } from '@clearwire/logic';
+import { submitReport, type SubmitReportPhoto } from '@clearwire/logic';
 
 import { supabase } from '../lib/supabase';
 import { getDeviceId } from '../lib/deviceId';
+import { DamageIcon } from '../components/DamageIcon';
+import { pickFromGallery, takePhotoWithPicker, type PickedPhoto } from '../lib/photoPicker';
 
 type Stage = 'capture' | 'classify' | 'submitting' | 'done';
+type LocationSource = 'gps' | 'exif';
+
+const MAX_PHOTOS = 5;
 
 export default function Report() {
   const router = useRouter();
@@ -35,14 +41,15 @@ export default function Report() {
   const [camPerm, requestCamPerm] = useCameraPermissions();
 
   const [stage, setStage] = useState<Stage>('capture');
-  const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [photos, setPhotos] = useState<PickedPhoto[]>([]);
   const [damageType, setDamageType] = useState<DamageType | null>(null);
   const [description, setDescription] = useState('');
-  const [location, setLocation] = useState<{
+  const [gpsLocation, setGpsLocation] = useState<{
     lat: number;
     lng: number;
     accuracy: number | null;
   } | null>(null);
+  const [locationSource, setLocationSource] = useState<LocationSource>('gps');
   const [locationError, setLocationError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -56,7 +63,7 @@ export default function Report() {
         const pos = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.Balanced,
         });
-        setLocation({
+        setGpsLocation({
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
           accuracy: pos.coords.accuracy,
@@ -67,6 +74,19 @@ export default function Report() {
     })();
   }, []);
 
+  // Final location sent with the report: EXIF coords take priority over GPS
+  // when the first photo came from the gallery with location metadata.
+  const effectiveLocation = (() => {
+    if (locationSource === 'exif' && photos[0]?.exifCoords) {
+      return {
+        lat: photos[0].exifCoords.lat,
+        lng: photos[0].exifCoords.lng,
+        accuracy: null as number | null,
+      };
+    }
+    return gpsLocation;
+  })();
+
   async function handleCapture() {
     if (!cameraRef.current) return;
     try {
@@ -75,23 +95,63 @@ export default function Report() {
         skipProcessing: false,
       });
       if (!shot) return;
-
       const processed = await ImageManipulator.manipulateAsync(
         shot.uri,
         [{ resize: { width: 1600 } }],
         { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
       );
-
-      setPhotoUri(processed.uri);
-      setStage('classify');
+      addPhoto({ uri: processed.uri, exifCoords: null });
     } catch (e: any) {
       Alert.alert('Camera error', e?.message ?? String(e));
     }
   }
 
+  async function handlePickGallery() {
+    const picked = await pickFromGallery();
+    if (!picked) return;
+    addPhoto(picked);
+  }
+
+  async function handlePickAnotherCamera() {
+    const picked = await takePhotoWithPicker();
+    if (!picked) return;
+    addPhoto(picked);
+  }
+
+  function addPhoto(p: PickedPhoto) {
+    setPhotos((prev) => {
+      const next = [...prev, p];
+      // First photo with EXIF coords → use those as the report location.
+      if (prev.length === 0 && p.exifCoords) {
+        setLocationSource('exif');
+      }
+      return next;
+    });
+    setStage('classify');
+  }
+
+  function handleRemovePhoto(index: number) {
+    setPhotos((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      // If we removed the first photo and it had EXIF, fall back to GPS.
+      if (index === 0 && next[0]?.exifCoords == null) {
+        setLocationSource('gps');
+      }
+      return next;
+    });
+  }
+
+  function handleAddAnother() {
+    Alert.alert('Add another photo', undefined, [
+      { text: 'Camera', onPress: handlePickAnotherCamera },
+      { text: 'Gallery', onPress: handlePickGallery },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
+
   async function handleSubmit() {
-    if (!photoUri || !damageType) return;
-    if (!location) {
+    if (!photos.length || !damageType) return;
+    if (!effectiveLocation) {
       Alert.alert(
         'No location yet',
         locationError ??
@@ -99,25 +159,29 @@ export default function Report() {
       );
       return;
     }
-
     setStage('submitting');
     try {
       const deviceId = await getDeviceId();
+      const photoPayloads: SubmitReportPhoto[] = [];
+      for (const p of photos) {
+        const base64 = await FileSystem.readAsStringAsync(p.uri, {
+          encoding: 'base64',
+        });
+        photoPayloads.push({
+          uri: p.uri,
+          bytes: base64ToArrayBuffer(base64),
+          ext: 'jpg',
+        });
+      }
 
-      // Read photo bytes from disk. RN's fetch/Blob is unreliable for
-      // local file URIs; FileSystem returns base64 we convert to bytes.
-      const base64 = await FileSystem.readAsStringAsync(photoUri, {
-        encoding: 'base64',
-      });
-      const photoBytes = base64ToArrayBuffer(base64);
       const result = await submitReport({
         supabase,
         damageType,
         description: description.trim() || undefined,
-        photos: [{ uri: photoUri, bytes: photoBytes, ext: 'jpg' }],
-        latitude: location.lat,
-        longitude: location.lng,
-        accuracyMeters: location.accuracy ?? undefined,
+        photos: photoPayloads,
+        latitude: effectiveLocation.lat,
+        longitude: effectiveLocation.lng,
+        accuracyMeters: effectiveLocation.accuracy ?? undefined,
         deviceId,
       });
 
@@ -126,7 +190,6 @@ export default function Report() {
         Alert.alert('Submit failed', `${result.stage}: ${result.error}`);
         return;
       }
-
       setStage('done');
     } catch (e: any) {
       setStage('classify');
@@ -164,7 +227,7 @@ export default function Report() {
               style={[
                 styles.locationDot,
                 {
-                  backgroundColor: location
+                  backgroundColor: gpsLocation
                     ? T.success
                     : locationError
                     ? T.danger
@@ -173,16 +236,22 @@ export default function Report() {
               ]}
             />
             <Text style={styles.locationText}>
-              {location
-                ? `GPS ready · ±${Math.round(location.accuracy ?? 0)}m`
+              {gpsLocation
+                ? `GPS ready · ±${Math.round(gpsLocation.accuracy ?? 0)}m`
                 : locationError
                 ? 'GPS error'
                 : 'Getting GPS fix…'}
             </Text>
           </View>
-          <Pressable style={styles.shutter} onPress={handleCapture}>
-            <View style={styles.shutterInner} />
-          </Pressable>
+          <View style={styles.cameraActions}>
+            <Pressable onPress={handlePickGallery} style={styles.galleryBtn} hitSlop={8}>
+              <Text style={styles.galleryBtnText}>Gallery</Text>
+            </Pressable>
+            <Pressable style={styles.shutter} onPress={handleCapture}>
+              <View style={styles.shutterInner} />
+            </Pressable>
+            <View style={styles.galleryBtn} />
+          </View>
         </SafeAreaView>
       </View>
     );
@@ -206,29 +275,60 @@ export default function Report() {
       style={styles.classifyContainer}
       contentContainerStyle={styles.classifyContent}
     >
-      {photoUri && <Image source={{ uri: photoUri }} style={styles.preview} />}
+      <Text style={styles.label}>
+        Photos ({photos.length}/{MAX_PHOTOS})
+      </Text>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.photoStrip}
+      >
+        {photos.map((p, i) => (
+          <View key={`${p.uri}-${i}`} style={styles.photoThumbWrap}>
+            <Image source={{ uri: p.uri }} style={styles.photoThumb} />
+            <Pressable
+              onPress={() => handleRemovePhoto(i)}
+              style={styles.photoRemoveBtn}
+              hitSlop={8}
+            >
+              <Text style={styles.photoRemoveText}>✕</Text>
+            </Pressable>
+          </View>
+        ))}
+        {photos.length < MAX_PHOTOS && (
+          <Pressable onPress={handleAddAnother} style={styles.addPhotoBtn}>
+            <Text style={styles.addPhotoPlus}>+</Text>
+            <Text style={styles.addPhotoLabel}>Add</Text>
+          </Pressable>
+        )}
+      </ScrollView>
 
       <Text style={styles.label}>What kind of damage?</Text>
       <View style={styles.damageGrid}>
-        {(Object.keys(DAMAGE_TYPE_LABELS) as DamageType[]).map((type) => (
-          <Pressable
-            key={type}
-            onPress={() => setDamageType(type)}
-            style={[
-              styles.damageChip,
-              damageType === type && styles.damageChipActive,
-            ]}
-          >
-            <Text
-              style={[
-                styles.damageChipText,
-                damageType === type && styles.damageChipTextActive,
-              ]}
+        {(Object.keys(DAMAGE_TYPE_LABELS) as DamageType[]).map((type) => {
+          const active = damageType === type;
+          return (
+            <Pressable
+              key={type}
+              onPress={() => setDamageType(type)}
+              style={[styles.damageChip, active && styles.damageChipActive]}
             >
-              {DAMAGE_TYPE_LABELS[type]}
-            </Text>
-          </Pressable>
-        ))}
+              <DamageIcon
+                name={DAMAGE_TYPE_ICONS[type]}
+                size={16}
+                color={active ? T.bg : T.text}
+              />
+              <Text
+                style={[
+                  styles.damageChipText,
+                  active && styles.damageChipTextActive,
+                ]}
+              >
+                {DAMAGE_TYPE_LABELS[type]}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
 
       <Text style={styles.label}>Description (optional)</Text>
@@ -243,19 +343,39 @@ export default function Report() {
       />
 
       <View style={styles.locationRow}>
+        <Text style={styles.locationRowLabel}>
+          {locationSource === 'exif' ? '📍 From photo' : '📍 Current location'}
+        </Text>
         <Text style={styles.locationRowText}>
-          {location
-            ? `📍 ${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}`
+          {effectiveLocation
+            ? `${effectiveLocation.lat.toFixed(5)}, ${effectiveLocation.lng.toFixed(5)}`
             : locationError ?? 'Getting location…'}
         </Text>
+        {photos[0]?.exifCoords && gpsLocation && locationSource === 'exif' && (
+          <Pressable
+            onPress={() => setLocationSource('gps')}
+            style={styles.locationSwapBtn}
+          >
+            <Text style={styles.locationSwapText}>Use current location instead</Text>
+          </Pressable>
+        )}
+        {locationSource === 'gps' && photos[0]?.exifCoords && (
+          <Pressable
+            onPress={() => setLocationSource('exif')}
+            style={styles.locationSwapBtn}
+          >
+            <Text style={styles.locationSwapText}>Use photo's location instead</Text>
+          </Pressable>
+        )}
       </View>
 
       <Pressable
         onPress={handleSubmit}
-        disabled={!damageType || stage === 'submitting'}
+        disabled={!damageType || !photos.length || stage === 'submitting'}
         style={[
           styles.primaryBtn,
-          (!damageType || stage === 'submitting') && styles.primaryBtnDisabled,
+          (!damageType || !photos.length || stage === 'submitting') &&
+            styles.primaryBtnDisabled,
         ]}
       >
         {stage === 'submitting' ? (
@@ -267,14 +387,15 @@ export default function Report() {
 
       <Pressable
         onPress={() => {
-          setPhotoUri(null);
+          setPhotos([]);
           setDamageType(null);
           setDescription('');
+          setLocationSource('gps');
           setStage('capture');
         }}
         style={styles.retakeBtn}
       >
-        <Text style={styles.retakeText}>Retake photo</Text>
+        <Text style={styles.retakeText}>Start over</Text>
       </Pressable>
     </ScrollView>
   );
@@ -299,11 +420,7 @@ const styles = StyleSheet.create({
     padding: T.space.xl,
     gap: T.space.lg,
   },
-  bodyText: {
-    color: T.text,
-    fontSize: T.font.md,
-    textAlign: 'center',
-  },
+  bodyText: { color: T.text, fontSize: T.font.md, textAlign: 'center' },
   cameraContainer: { flex: 1, backgroundColor: '#000' },
   camera: { flex: 1 },
   cameraOverlay: {
@@ -326,6 +443,28 @@ const styles = StyleSheet.create({
   },
   locationDot: { width: 8, height: 8, borderRadius: 4 },
   locationText: { color: '#fff', fontSize: T.font.sm },
+  cameraActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: T.space.xl,
+  },
+  galleryBtn: {
+    minWidth: 64,
+    paddingVertical: T.space.sm,
+    alignItems: 'center',
+  },
+  galleryBtnText: {
+    color: '#fff',
+    fontSize: T.font.sm,
+    fontWeight: '600',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: T.space.md,
+    paddingVertical: T.space.sm,
+    borderRadius: T.radius.pill,
+    overflow: 'hidden',
+  },
   shutter: {
     width: 80,
     height: 80,
@@ -344,23 +483,49 @@ const styles = StyleSheet.create({
 
   classifyContainer: { flex: 1, backgroundColor: T.bg },
   classifyContent: { padding: T.space.lg, gap: T.space.lg },
-  preview: {
-    width: '100%',
+  label: { color: T.text, fontSize: T.font.md, fontWeight: '600' },
+  photoStrip: { gap: T.space.sm, paddingRight: T.space.lg },
+  photoThumbWrap: {
+    position: 'relative',
+    width: 120,
     aspectRatio: 4 / 3,
-    borderRadius: T.radius.lg,
+  },
+  photoThumb: {
+    width: '100%',
+    height: '100%',
+    borderRadius: T.radius.md,
     backgroundColor: T.surface,
   },
-  label: {
-    color: T.text,
-    fontSize: T.font.md,
-    fontWeight: '600',
+  photoRemoveBtn: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  damageGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: T.space.sm,
+  photoRemoveText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  addPhotoBtn: {
+    width: 120,
+    aspectRatio: 4 / 3,
+    borderRadius: T.radius.md,
+    borderWidth: 1,
+    borderColor: T.border,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: T.surface,
   },
+  addPhotoPlus: { color: T.primary, fontSize: 32, fontWeight: '300' },
+  addPhotoLabel: { color: T.textMuted, fontSize: T.font.sm },
+  damageGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: T.space.sm },
   damageChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: T.space.xs + 2,
     paddingHorizontal: T.space.md,
     paddingVertical: T.space.sm + 2,
     borderRadius: T.radius.pill,
@@ -368,19 +533,9 @@ const styles = StyleSheet.create({
     borderColor: T.border,
     backgroundColor: T.surface,
   },
-  damageChipActive: {
-    backgroundColor: T.primary,
-    borderColor: T.primary,
-  },
-  damageChipText: {
-    color: T.text,
-    fontSize: T.font.sm,
-    fontWeight: '500',
-  },
-  damageChipTextActive: {
-    color: T.bg,
-    fontWeight: '700',
-  },
+  damageChipActive: { backgroundColor: T.primary, borderColor: T.primary },
+  damageChipText: { color: T.text, fontSize: T.font.sm, fontWeight: '500' },
+  damageChipTextActive: { color: T.bg, fontWeight: '700' },
   input: {
     backgroundColor: T.surface,
     borderColor: T.border,
@@ -396,10 +551,16 @@ const styles = StyleSheet.create({
     backgroundColor: T.surfaceAlt,
     padding: T.space.md,
     borderRadius: T.radius.md,
+    gap: 2,
   },
-  locationRowText: {
-    color: T.textMuted,
+  locationRowLabel: { color: T.text, fontSize: T.font.sm, fontWeight: '600' },
+  locationRowText: { color: T.textMuted, fontSize: T.font.sm },
+  locationSwapBtn: { marginTop: T.space.sm },
+  locationSwapText: {
+    color: T.primary,
     fontSize: T.font.sm,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
   primaryBtn: {
     backgroundColor: T.primary,
@@ -408,20 +569,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   primaryBtnDisabled: { opacity: 0.4 },
-  primaryBtnText: {
-    color: T.bg,
-    fontSize: T.font.lg,
-    fontWeight: '700',
-  },
+  primaryBtnText: { color: T.bg, fontSize: T.font.lg, fontWeight: '700' },
   retakeBtn: { alignItems: 'center', paddingVertical: T.space.md },
   retakeText: { color: T.textMuted, fontSize: T.font.sm },
-  successIcon: {
-    fontSize: 64,
-    color: T.success,
-  },
-  successTitle: {
-    color: T.text,
-    fontSize: T.font.xxl,
-    fontWeight: '700',
-  },
+  successIcon: { fontSize: 64, color: T.success },
+  successTitle: { color: T.text, fontSize: T.font.xxl, fontWeight: '700' },
 });
