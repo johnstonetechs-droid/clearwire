@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
+  TextInput,
   Pressable,
   StyleSheet,
   ActivityIndicator,
@@ -13,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import * as FileSystem from 'expo-file-system/legacy';
 
 import { T, APWA_COLORS, palette } from '@clearwire/brand';
 import {
@@ -30,6 +32,11 @@ import {
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import { DamageIcon } from '../components/DamageIcon';
+import {
+  pickFromGallery,
+  takePhotoWithPicker,
+  type PickedPhoto,
+} from '../lib/photoPicker';
 
 type Tab = 'damage' | 'outages';
 
@@ -369,6 +376,16 @@ function DamageSheet({
   onStatusChanged: () => void;
 }) {
   const [updating, setUpdating] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [damageType, setDamageType] = useState<DamageType>(report.damage_type);
+  const [description, setDescription] = useState(report.description ?? '');
+  const [company, setCompany] = useState(report.affected_company ?? '');
+  const [photoUrls, setPhotoUrls] = useState<string[]>(report.photo_urls);
+  const [newPhotos, setNewPhotos] = useState<PickedPhoto[]>([]);
+
+  const editable = report.status === 'reported';
+  const totalPhotos = photoUrls.length + newPhotos.length;
 
   async function setStatus(next: ReportStatus) {
     setUpdating(next);
@@ -381,63 +398,260 @@ function DamageSheet({
     onStatusChanged();
   }
 
+  function addPhoto() {
+    if (totalPhotos >= 5) {
+      Alert.alert('Max photos', 'A report can have at most 5 photos.');
+      return;
+    }
+    Alert.alert('Add photo', undefined, [
+      {
+        text: 'Camera',
+        onPress: async () => {
+          const p = await takePhotoWithPicker();
+          if (p) setNewPhotos((prev) => [...prev, p]);
+        },
+      },
+      {
+        text: 'Gallery',
+        onPress: async () => {
+          const p = await pickFromGallery();
+          if (p) setNewPhotos((prev) => [...prev, p]);
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
+
+  function removeExisting(url: string) {
+    setPhotoUrls((prev) => prev.filter((u) => u !== url));
+  }
+  function removeNew(index: number) {
+    setNewPhotos((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  async function handleSave() {
+    if (totalPhotos === 0) {
+      Alert.alert('No photos', 'A report needs at least one photo.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const uploadedUrls: string[] = [];
+      for (const p of newPhotos) {
+        const url = await uploadPhotoToStorage(p);
+        uploadedUrls.push(url);
+      }
+      const finalUrls = [...photoUrls, ...uploadedUrls];
+      const { error } = await supabase
+        .from('reports')
+        .update({
+          damage_type: damageType,
+          description: description.trim() || null,
+          affected_company: company.trim() || null,
+          photo_urls: finalUrls,
+        })
+        .eq('id', report.id);
+      if (error) {
+        Alert.alert('Save failed', error.message);
+        return;
+      }
+      setEditing(false);
+      setNewPhotos([]);
+      onStatusChanged(); // triggers list refresh and closes sheet
+    } catch (e: any) {
+      Alert.alert('Save failed', e?.message ?? String(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <View style={styles.sheetBackdrop}>
       <Pressable style={styles.sheetBackdropTap} onPress={onClose} />
       <View style={styles.sheet}>
         <View style={styles.sheetHandle} />
         <ScrollView contentContainerStyle={styles.sheetContent}>
-          {report.photo_urls[0] && (
-            <Image source={{ uri: report.photo_urls[0] }} style={styles.sheetPhoto} />
-          )}
-          {report.photo_urls.length > 1 && (
-            <Text style={styles.sheetMeta}>
-              +{report.photo_urls.length - 1} more photo{report.photo_urls.length > 2 ? 's' : ''}
-            </Text>
-          )}
-          <View style={styles.sheetHeader}>
-            <View style={[styles.damagePill, { backgroundColor: APWA_COLORS[report.damage_type] }]}>
-              <DamageIcon
-                name={DAMAGE_TYPE_ICONS[report.damage_type]}
-                size={14}
-                color={palette.white}
-              />
-              <Text style={styles.damagePillText}>{DAMAGE_TYPE_LABELS[report.damage_type]}</Text>
-            </View>
-            <Text style={styles.sheetAge}>{timeAgo(report.created_at)}</Text>
-          </View>
-          {report.affected_company && (
-            <Text style={styles.sheetMeta}>Service: {report.affected_company}</Text>
-          )}
-          {report.description && <Text style={styles.sheetDescription}>{report.description}</Text>}
-          <Text style={styles.sheetMeta}>Status: {report.status}</Text>
-
-          <View style={styles.statusActions}>
-            {reportNextStates(report.status).map((next) => (
-              <Pressable
-                key={next.value}
-                onPress={() => setStatus(next.value)}
-                disabled={updating !== null}
-                style={[
-                  styles.statusBtn,
-                  next.destructive && styles.statusBtnDanger,
-                  updating !== null && styles.statusBtnDisabled,
-                ]}
-              >
-                {updating === next.value ? (
-                  <ActivityIndicator color={T.text} size="small" />
-                ) : (
-                  <Text style={[styles.statusBtnText, next.destructive && styles.statusBtnTextDanger]}>
-                    {next.label}
-                  </Text>
+          {editing ? (
+            <>
+              <Text style={styles.editLabel}>Photos ({totalPhotos}/5)</Text>
+              <ScrollView horizontal contentContainerStyle={styles.photoStrip}>
+                {photoUrls.map((u) => (
+                  <View key={u} style={styles.photoThumbWrap}>
+                    <Image source={{ uri: u }} style={styles.photoThumb} />
+                    <Pressable
+                      onPress={() => removeExisting(u)}
+                      style={styles.photoRemoveBtn}
+                      hitSlop={8}
+                    >
+                      <Text style={styles.photoRemoveText}>✕</Text>
+                    </Pressable>
+                  </View>
+                ))}
+                {newPhotos.map((p, i) => (
+                  <View key={`${p.uri}-${i}`} style={styles.photoThumbWrap}>
+                    <Image source={{ uri: p.uri }} style={styles.photoThumb} />
+                    <Pressable
+                      onPress={() => removeNew(i)}
+                      style={styles.photoRemoveBtn}
+                      hitSlop={8}
+                    >
+                      <Text style={styles.photoRemoveText}>✕</Text>
+                    </Pressable>
+                  </View>
+                ))}
+                {totalPhotos < 5 && (
+                  <Pressable onPress={addPhoto} style={styles.addPhotoBtn}>
+                    <Text style={styles.addPhotoPlus}>+</Text>
+                    <Text style={styles.addPhotoLabel}>Add</Text>
+                  </Pressable>
                 )}
-              </Pressable>
-            ))}
-          </View>
+              </ScrollView>
 
-          <Pressable style={styles.sheetCloseBtn} onPress={onClose}>
-            <Text style={styles.sheetCloseText}>Close</Text>
-          </Pressable>
+              <Text style={styles.editLabel}>Damage type</Text>
+              <View style={styles.chipWrap}>
+                {(Object.keys(DAMAGE_TYPE_LABELS) as DamageType[]).map((type) => {
+                  const active = damageType === type;
+                  return (
+                    <Pressable
+                      key={type}
+                      onPress={() => setDamageType(type)}
+                      style={[
+                        styles.editChip,
+                        active && { backgroundColor: T.primary, borderColor: T.primary },
+                      ]}
+                    >
+                      <DamageIcon
+                        name={DAMAGE_TYPE_ICONS[type]}
+                        size={14}
+                        color={active ? T.bg : T.text}
+                      />
+                      <Text style={[styles.editChipText, active && styles.editChipTextActive]}>
+                        {DAMAGE_TYPE_LABELS[type]}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <Text style={styles.editLabel}>Description</Text>
+              <TextInput
+                value={description}
+                onChangeText={setDescription}
+                placeholder="e.g. wire hanging low over driveway"
+                placeholderTextColor={T.textDim}
+                multiline
+                maxLength={280}
+                style={[styles.editInput, styles.editInputMulti]}
+              />
+
+              <Text style={styles.editLabel}>Affected company</Text>
+              <TextInput
+                value={company}
+                onChangeText={setCompany}
+                placeholder="e.g. Spectrum, AT&T"
+                placeholderTextColor={T.textDim}
+                autoCapitalize="words"
+                style={styles.editInput}
+              />
+
+              <View style={styles.editActions}>
+                <Pressable
+                  onPress={() => {
+                    setEditing(false);
+                    setDamageType(report.damage_type);
+                    setDescription(report.description ?? '');
+                    setCompany(report.affected_company ?? '');
+                    setPhotoUrls(report.photo_urls);
+                    setNewPhotos([]);
+                  }}
+                  disabled={saving}
+                  style={[styles.editBtn, styles.editBtnCancel]}
+                >
+                  <Text style={styles.editBtnCancelText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleSave}
+                  disabled={saving}
+                  style={[styles.editBtn, styles.editBtnSave, saving && styles.statusBtnDisabled]}
+                >
+                  {saving ? (
+                    <ActivityIndicator color={T.bg} />
+                  ) : (
+                    <Text style={styles.editBtnSaveText}>Save</Text>
+                  )}
+                </Pressable>
+              </View>
+            </>
+          ) : (
+            <>
+              {report.photo_urls[0] && (
+                <Image source={{ uri: report.photo_urls[0] }} style={styles.sheetPhoto} />
+              )}
+              {report.photo_urls.length > 1 && (
+                <Text style={styles.sheetMeta}>
+                  +{report.photo_urls.length - 1} more photo{report.photo_urls.length > 2 ? 's' : ''}
+                </Text>
+              )}
+              <View style={styles.sheetHeader}>
+                <View style={[styles.damagePill, { backgroundColor: APWA_COLORS[report.damage_type] }]}>
+                  <DamageIcon
+                    name={DAMAGE_TYPE_ICONS[report.damage_type]}
+                    size={14}
+                    color={palette.white}
+                  />
+                  <Text style={styles.damagePillText}>
+                    {DAMAGE_TYPE_LABELS[report.damage_type]}
+                  </Text>
+                </View>
+                <Text style={styles.sheetAge}>{timeAgo(report.created_at)}</Text>
+              </View>
+              {report.affected_company && (
+                <Text style={styles.sheetMeta}>Service: {report.affected_company}</Text>
+              )}
+              {report.description && (
+                <Text style={styles.sheetDescription}>{report.description}</Text>
+              )}
+              <Text style={styles.sheetMeta}>Status: {report.status}</Text>
+
+              {editable && (
+                <Pressable onPress={() => setEditing(true)} style={styles.editEntryBtn}>
+                  <Text style={styles.editEntryBtnText}>Edit report</Text>
+                </Pressable>
+              )}
+
+              <View style={styles.statusActions}>
+                {reportNextStates(report.status).map((next) => (
+                  <Pressable
+                    key={next.value}
+                    onPress={() => setStatus(next.value)}
+                    disabled={updating !== null}
+                    style={[
+                      styles.statusBtn,
+                      next.destructive && styles.statusBtnDanger,
+                      updating !== null && styles.statusBtnDisabled,
+                    ]}
+                  >
+                    {updating === next.value ? (
+                      <ActivityIndicator color={T.text} size="small" />
+                    ) : (
+                      <Text
+                        style={[
+                          styles.statusBtnText,
+                          next.destructive && styles.statusBtnTextDanger,
+                        ]}
+                      >
+                        {next.label}
+                      </Text>
+                    )}
+                  </Pressable>
+                ))}
+              </View>
+
+              <Pressable style={styles.sheetCloseBtn} onPress={onClose}>
+                <Text style={styles.sheetCloseText}>Close</Text>
+              </Pressable>
+            </>
+          )}
         </ScrollView>
       </View>
     </View>
@@ -454,6 +668,14 @@ function OutageSheet({
   onStatusChanged: () => void;
 }) {
   const [updating, setUpdating] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [serviceType, setServiceType] = useState<ServiceType>(outage.service_type);
+  const [provider, setProvider] = useState(outage.provider_company);
+  const [description, setDescription] = useState(outage.description ?? '');
+  const [ticket, setTicket] = useState(outage.external_ticket ?? '');
+
+  const editable = outage.status === 'reported';
 
   async function setStatus(next: OutageStatus) {
     setUpdating(next);
@@ -469,65 +691,209 @@ function OutageSheet({
     onStatusChanged();
   }
 
+  async function handleSave() {
+    if (!provider.trim()) {
+      Alert.alert('Provider required', 'Please enter the provider or company name.');
+      return;
+    }
+    setSaving(true);
+    const { error } = await supabase
+      .from('outage_reports')
+      .update({
+        service_type: serviceType,
+        provider_company: provider.trim(),
+        description: description.trim() || null,
+        external_ticket: ticket.trim() || null,
+      })
+      .eq('id', outage.id);
+    setSaving(false);
+    if (error) {
+      Alert.alert('Save failed', error.message);
+      return;
+    }
+    setEditing(false);
+    onStatusChanged();
+  }
+
   return (
     <View style={styles.sheetBackdrop}>
       <Pressable style={styles.sheetBackdropTap} onPress={onClose} />
       <View style={styles.sheet}>
         <View style={styles.sheetHandle} />
         <ScrollView contentContainerStyle={styles.sheetContent}>
-          <View style={styles.sheetHeader}>
-            <View style={[styles.servicePill, { backgroundColor: SERVICE_TYPE_COLORS[outage.service_type] }]}>
-              <DamageIcon
-                name={SERVICE_TYPE_ICONS[outage.service_type]}
-                size={14}
-                color={palette.white}
+          {editing ? (
+            <>
+              <Text style={styles.editLabel}>Service type</Text>
+              <View style={styles.chipWrap}>
+                {(Object.keys(SERVICE_TYPE_LABELS) as ServiceType[]).map((type) => {
+                  const active = serviceType === type;
+                  return (
+                    <Pressable
+                      key={type}
+                      onPress={() => setServiceType(type)}
+                      style={[
+                        styles.editChip,
+                        active && { backgroundColor: T.primary, borderColor: T.primary },
+                      ]}
+                    >
+                      <DamageIcon
+                        name={SERVICE_TYPE_ICONS[type]}
+                        size={14}
+                        color={active ? T.bg : T.text}
+                      />
+                      <Text style={[styles.editChipText, active && styles.editChipTextActive]}>
+                        {SERVICE_TYPE_LABELS[type]}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <Text style={styles.editLabel}>Provider / company</Text>
+              <TextInput
+                value={provider}
+                onChangeText={setProvider}
+                placeholder="e.g. Spectrum, AT&T, FirstEnergy"
+                placeholderTextColor={T.textDim}
+                autoCapitalize="words"
+                style={styles.editInput}
               />
-              <Text style={styles.servicePillText}>{SERVICE_TYPE_LABELS[outage.service_type]}</Text>
-            </View>
-            <Text style={styles.sheetAge}>{timeAgo(outage.created_at)}</Text>
-          </View>
-          <Text style={styles.provider}>{outage.provider_company}</Text>
-          {outage.description && (
-            <Text style={styles.sheetDescription}>{outage.description}</Text>
-          )}
-          {outage.external_ticket && (
-            <Text style={styles.sheetMeta}>Provider ticket: {outage.external_ticket}</Text>
-          )}
-          <Text style={styles.sheetMeta}>
-            Status: {outage.status}
-            {outage.resolved_at ? ` · resolved ${timeAgo(outage.resolved_at)}` : ''}
-          </Text>
 
-          <View style={styles.statusActions}>
-            {outageNextStates(outage.status).map((next) => (
-              <Pressable
-                key={next.value}
-                onPress={() => setStatus(next.value)}
-                disabled={updating !== null}
-                style={[
-                  styles.statusBtn,
-                  next.destructive && styles.statusBtnDanger,
-                  updating !== null && styles.statusBtnDisabled,
-                ]}
-              >
-                {updating === next.value ? (
-                  <ActivityIndicator color={T.text} size="small" />
-                ) : (
-                  <Text style={[styles.statusBtnText, next.destructive && styles.statusBtnTextDanger]}>
-                    {next.label}
+              <Text style={styles.editLabel}>Description</Text>
+              <TextInput
+                value={description}
+                onChangeText={setDescription}
+                placeholder="e.g. Internet has been out since 2pm"
+                placeholderTextColor={T.textDim}
+                multiline
+                maxLength={280}
+                style={[styles.editInput, styles.editInputMulti]}
+              />
+
+              <Text style={styles.editLabel}>Provider ticket #</Text>
+              <TextInput
+                value={ticket}
+                onChangeText={setTicket}
+                placeholder="If you've already called it in"
+                placeholderTextColor={T.textDim}
+                autoCapitalize="characters"
+                style={styles.editInput}
+              />
+
+              <View style={styles.editActions}>
+                <Pressable
+                  onPress={() => {
+                    setEditing(false);
+                    setServiceType(outage.service_type);
+                    setProvider(outage.provider_company);
+                    setDescription(outage.description ?? '');
+                    setTicket(outage.external_ticket ?? '');
+                  }}
+                  disabled={saving}
+                  style={[styles.editBtn, styles.editBtnCancel]}
+                >
+                  <Text style={styles.editBtnCancelText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleSave}
+                  disabled={saving}
+                  style={[styles.editBtn, styles.editBtnSave, saving && styles.statusBtnDisabled]}
+                >
+                  {saving ? (
+                    <ActivityIndicator color={T.bg} />
+                  ) : (
+                    <Text style={styles.editBtnSaveText}>Save</Text>
+                  )}
+                </Pressable>
+              </View>
+            </>
+          ) : (
+            <>
+              <View style={styles.sheetHeader}>
+                <View
+                  style={[styles.servicePill, { backgroundColor: SERVICE_TYPE_COLORS[outage.service_type] }]}
+                >
+                  <DamageIcon
+                    name={SERVICE_TYPE_ICONS[outage.service_type]}
+                    size={14}
+                    color={palette.white}
+                  />
+                  <Text style={styles.servicePillText}>
+                    {SERVICE_TYPE_LABELS[outage.service_type]}
                   </Text>
-                )}
-              </Pressable>
-            ))}
-          </View>
+                </View>
+                <Text style={styles.sheetAge}>{timeAgo(outage.created_at)}</Text>
+              </View>
+              <Text style={styles.provider}>{outage.provider_company}</Text>
+              {outage.description && (
+                <Text style={styles.sheetDescription}>{outage.description}</Text>
+              )}
+              {outage.external_ticket && (
+                <Text style={styles.sheetMeta}>Provider ticket: {outage.external_ticket}</Text>
+              )}
+              <Text style={styles.sheetMeta}>
+                Status: {outage.status}
+                {outage.resolved_at ? ` · resolved ${timeAgo(outage.resolved_at)}` : ''}
+              </Text>
 
-          <Pressable style={styles.sheetCloseBtn} onPress={onClose}>
-            <Text style={styles.sheetCloseText}>Close</Text>
-          </Pressable>
+              {editable && (
+                <Pressable onPress={() => setEditing(true)} style={styles.editEntryBtn}>
+                  <Text style={styles.editEntryBtnText}>Edit outage</Text>
+                </Pressable>
+              )}
+
+              <View style={styles.statusActions}>
+                {outageNextStates(outage.status).map((next) => (
+                  <Pressable
+                    key={next.value}
+                    onPress={() => setStatus(next.value)}
+                    disabled={updating !== null}
+                    style={[
+                      styles.statusBtn,
+                      next.destructive && styles.statusBtnDanger,
+                      updating !== null && styles.statusBtnDisabled,
+                    ]}
+                  >
+                    {updating === next.value ? (
+                      <ActivityIndicator color={T.text} size="small" />
+                    ) : (
+                      <Text
+                        style={[
+                          styles.statusBtnText,
+                          next.destructive && styles.statusBtnTextDanger,
+                        ]}
+                      >
+                        {next.label}
+                      </Text>
+                    )}
+                  </Pressable>
+                ))}
+              </View>
+
+              <Pressable style={styles.sheetCloseBtn} onPress={onClose}>
+                <Text style={styles.sheetCloseText}>Close</Text>
+              </Pressable>
+            </>
+          )}
         </ScrollView>
       </View>
     </View>
   );
+}
+
+async function uploadPhotoToStorage(photo: PickedPhoto): Promise<string> {
+  const base64 = await FileSystem.readAsStringAsync(photo.uri, { encoding: 'base64' });
+  const binary = globalThis.atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const filename = `edit/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${photo.ext}`;
+  const contentType = `image/${photo.ext === 'jpg' ? 'jpeg' : 'png'}`;
+  const { error } = await supabase.storage
+    .from('report-photos')
+    .upload(filename, bytes.buffer, { contentType, upsert: false });
+  if (error) throw error;
+  const { data } = supabase.storage.from('report-photos').getPublicUrl(filename);
+  return data.publicUrl;
 }
 
 function reportNextStates(
@@ -783,4 +1149,87 @@ const styles = StyleSheet.create({
   statusBtnDisabled: { opacity: 0.4 },
   statusBtnText: { color: T.text, fontSize: T.font.sm, fontWeight: '600' },
   statusBtnTextDanger: { color: T.danger },
+  editEntryBtn: {
+    alignItems: 'center',
+    paddingVertical: T.space.sm,
+  },
+  editEntryBtnText: {
+    color: T.primary,
+    fontSize: T.font.sm,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
+  editLabel: { color: T.text, fontSize: T.font.sm, fontWeight: '600' },
+  editInput: {
+    backgroundColor: T.bg,
+    borderColor: T.border,
+    borderWidth: 1,
+    borderRadius: T.radius.md,
+    padding: T.space.md,
+    color: T.text,
+    fontSize: T.font.md,
+  },
+  editInputMulti: { minHeight: 80, textAlignVertical: 'top' },
+  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: T.space.xs },
+  editChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: T.space.xs,
+    paddingHorizontal: T.space.sm + 2,
+    paddingVertical: T.space.xs + 2,
+    borderRadius: T.radius.pill,
+    borderWidth: 1,
+    borderColor: T.border,
+    backgroundColor: T.bg,
+  },
+  editChipText: { color: T.text, fontSize: T.font.xs, fontWeight: '500' },
+  editChipTextActive: { color: T.bg, fontWeight: '700' },
+  editActions: { flexDirection: 'row', gap: T.space.sm, marginTop: T.space.md },
+  editBtn: {
+    flex: 1,
+    paddingVertical: T.space.md,
+    borderRadius: T.radius.md,
+    alignItems: 'center',
+  },
+  editBtnCancel: {
+    borderWidth: 1,
+    borderColor: T.border,
+    backgroundColor: T.bg,
+  },
+  editBtnCancelText: { color: T.text, fontSize: T.font.md, fontWeight: '600' },
+  editBtnSave: { backgroundColor: T.primary },
+  editBtnSaveText: { color: T.bg, fontSize: T.font.md, fontWeight: '700' },
+  photoStrip: { gap: T.space.sm, paddingRight: T.space.md },
+  photoThumbWrap: { position: 'relative', width: 100, aspectRatio: 4 / 3 },
+  photoThumb: {
+    width: '100%',
+    height: '100%',
+    borderRadius: T.radius.sm,
+    backgroundColor: T.surfaceAlt,
+  },
+  photoRemoveBtn: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoRemoveText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  addPhotoBtn: {
+    width: 100,
+    aspectRatio: 4 / 3,
+    borderRadius: T.radius.sm,
+    borderWidth: 1,
+    borderColor: T.border,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: T.bg,
+  },
+  addPhotoPlus: { color: T.primary, fontSize: 28, fontWeight: '300' },
+  addPhotoLabel: { color: T.textMuted, fontSize: T.font.xs },
 });
