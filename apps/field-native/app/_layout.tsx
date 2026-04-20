@@ -48,6 +48,7 @@ export default function RootLayout() {
         <Stack.Screen name="sign-in" options={{ headerShown: false }} />
         <Stack.Screen name="auth-callback" options={{ headerShown: false }} />
         <Stack.Screen name="profile" options={{ headerShown: false }} />
+        <Stack.Screen name="my-activity" options={{ headerShown: false }} />
       </Stack>
     </SafeAreaProvider>
   );

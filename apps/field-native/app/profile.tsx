@@ -354,6 +354,15 @@ export default function ProfileScreen() {
 
         <View style={styles.divider} />
 
+        <Pressable
+          onPress={() => router.push('/my-activity')}
+          style={styles.secondaryBtn}
+        >
+          <Text style={styles.secondaryBtnText}>My submissions</Text>
+        </Pressable>
+
+        <View style={styles.divider} />
+
         <Text style={styles.sectionLabel}>Proximity alerts</Text>
 
         {isExpoGo && (
