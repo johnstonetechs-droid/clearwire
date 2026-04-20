@@ -102,6 +102,14 @@ email link. Not acceptable for field use where someone opens the app once a day.
 
 ## Other captured notes
 
+- **Check in on the queued EAS dev build.** An Android development client
+  was queued on the free tier on 2026-04-19 from `apps/field-native`
+  (build URL stored in the terminal history; can also look up via
+  `pnpm exec eas build:list`). Once it completes, download the APK,
+  sideload, and run `pnpm app:dev-client` to verify push delivery
+  end-to-end. Commit placeholder app icons (currently commented out
+  in `app.config.ts`) before building for production.
+
 - **Unified damage + outage map.** Today there are two separate screens
   (`/map` and `/outages`) each with their own pin style and filter
   chips. A single map showing both layers is a better UX — one view,
