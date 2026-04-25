@@ -1,6 +1,0 @@
-# Mirrors .gitignore for EAS uploads, EXCEPT google-services.json which
-# must travel with the build so the Android plugin can bundle Firebase
-# credentials. The file stays out of git via .gitignore; .easignore is
-# what EAS reads instead when present.
-
-expo-env.d.ts
