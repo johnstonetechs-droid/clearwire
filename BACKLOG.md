@@ -35,18 +35,13 @@ production EAS build, commit real PNG/SVG app icons and uncomment the
 `apps/field-native/app.config.ts` (currently commented out so the dev build
 prebuild step doesn't fail on missing assets).
 
-### Service-type vs. damage-type on map pins (schema decision)
-The incidents map uses a single "damage type" field for both the physical
-observation (downed line, leaning pole) and the service affected (power, fiber,
-cable, phone). These are logically different — a downed line can disrupt any
-combination of services.
-
-Proposed split:
-- `damage_type` (existing) — physical observation
-- `services_affected text[]` — which services are disrupted
-
-Pins would render by `services_affected`; filter chips would offer both.
-Needs a product/UX call before code work — not a pure implementation task.
+### Pin-glyph by services_affected (polish)
+Schema split shipped (`0013_services_affected.sql`, plus capture UI and
+filter chips). Map pins still render by `damage_type`. Next polish step:
+the WebView Leaflet template should pick the pin glyph/color from the
+report's `services_affected` (when set) so the legend unifies damage and
+outage pins around service disruption. Falls back to the damage_type
+color when `services_affected` is null/empty.
 
 ---
 
@@ -104,3 +99,4 @@ polish) from the prior roadmap are all done. Headline commits on
 **Resolved schema questions:**
 - Additional photos → `text[]` column on `reports` (not a child table)
 - Magic-link auth → kept as fallback; email+password is primary
+- damage_type vs services_affected → split into two fields (commit `3227f56`)

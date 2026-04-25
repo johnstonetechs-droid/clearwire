@@ -7,6 +7,7 @@ import type {
 
 export interface ReportFilters {
   damageTypes: ReadonlySet<DamageType>;
+  serviceTypes: ReadonlySet<ServiceType>;
   orgs: ReadonlySet<string>;
 }
 
@@ -22,6 +23,12 @@ export function filterReports(
   return reports.filter((r) => {
     if (filters.damageTypes.size > 0 && !filters.damageTypes.has(r.damage_type)) {
       return false;
+    }
+    if (filters.serviceTypes.size > 0) {
+      // Report must have at least one selected service in its services_affected.
+      if (!r.services_affected || r.services_affected.length === 0) return false;
+      const matches = r.services_affected.some((s) => filters.serviceTypes.has(s));
+      if (!matches) return false;
     }
     if (filters.orgs.size > 0) {
       if (!r.affected_company) return false;

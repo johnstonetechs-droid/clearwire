@@ -128,10 +128,17 @@ export default function IncidentsScreen() {
       showDamage
         ? filterReports(reports ?? [], {
             damageTypes: damageFilter.values,
+            serviceTypes: serviceFilter.values,
             orgs: orgFilter.values,
           })
         : [],
-    [reports, showDamage, damageFilter.values, orgFilter.values]
+    [
+      reports,
+      showDamage,
+      damageFilter.values,
+      serviceFilter.values,
+      orgFilter.values,
+    ]
   );
 
   const filteredOutages = useMemo(

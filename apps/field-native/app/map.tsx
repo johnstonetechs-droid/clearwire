@@ -19,8 +19,12 @@ import { T, APWA_COLORS, palette } from '@clearwire/brand';
 import {
   type DamageType,
   type ReportStatus,
+  type ServiceType,
   DAMAGE_TYPE_LABELS,
   DAMAGE_TYPE_ICONS,
+  SERVICE_TYPE_LABELS,
+  SERVICE_TYPE_ICONS,
+  SERVICE_TYPE_COLORS,
 } from '@clearwire/supabase';
 import {
   DEFAULT_RADIUS_MILES,
@@ -52,6 +56,7 @@ export default function MapScreen() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [view, setView] = useState<ViewMode>('map');
   const damageFilter = useToggleSet<DamageType>();
+  const serviceFilter = useToggleSet<ServiceType>();
   const companyFilter = useToggleSet<string>();
 
   useEffect(() => {
@@ -100,9 +105,15 @@ export default function MapScreen() {
     () =>
       filterReports(reports ?? [], {
         damageTypes: damageFilter.values,
+        serviceTypes: serviceFilter.values,
         orgs: companyFilter.values,
       }),
-    [reports, damageFilter.values, companyFilter.values]
+    [
+      reports,
+      damageFilter.values,
+      serviceFilter.values,
+      companyFilter.values,
+    ]
   );
 
   const reportsById = useMemo(() => {
@@ -217,6 +228,42 @@ export default function MapScreen() {
                   ]}
                 >
                   {DAMAGE_TYPE_LABELS[type]}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterRow}
+        >
+          {(Object.keys(SERVICE_TYPE_LABELS) as ServiceType[]).map((type) => {
+            const active = serviceFilter.has(type);
+            return (
+              <Pressable
+                key={type}
+                onPress={() => serviceFilter.toggle(type)}
+                style={[
+                  styles.filterChip,
+                  active && {
+                    backgroundColor: SERVICE_TYPE_COLORS[type],
+                    borderColor: SERVICE_TYPE_COLORS[type],
+                  },
+                ]}
+              >
+                <DamageIcon
+                  name={SERVICE_TYPE_ICONS[type]}
+                  size={14}
+                  color={active ? palette.white : T.text}
+                />
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    active && styles.filterChipTextActive,
+                  ]}
+                >
+                  {SERVICE_TYPE_LABELS[type]}
                 </Text>
               </Pressable>
             );
