@@ -27,7 +27,7 @@ const config: ExpoConfig = {
   },
   android: {
     package: 'com.clearwire.field',
-    googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? './google-services.json',
+    googleServicesFile: './google-services.json',
     // adaptiveIcon: {
     //   foregroundImage: './assets/adaptive-icon.png',
     //   backgroundColor: '#0B0F14',

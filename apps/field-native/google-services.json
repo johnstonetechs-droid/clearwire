@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1066043063031",
+    "project_id": "clearwire-14f0a",
+    "storage_bucket": "clearwire-14f0a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1066043063031:android:5eec8e95f6b4f8990eb1f2",
+        "android_client_info": {
+          "package_name": "com.clearwire.field"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCU-bBmSFjwb4TOPlvvcea5W8qmT02KlnY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
