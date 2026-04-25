@@ -20,8 +20,12 @@ import { useRouter } from 'expo-router';
 import { T } from '@clearwire/brand';
 import {
   type DamageType,
+  type ServiceType,
   DAMAGE_TYPE_LABELS,
   DAMAGE_TYPE_ICONS,
+  SERVICE_TYPE_LABELS,
+  SERVICE_TYPE_ICONS,
+  SERVICE_TYPE_COLORS,
 } from '@clearwire/supabase';
 import { submitReport, type SubmitReportPhoto } from '@clearwire/logic';
 
@@ -30,6 +34,7 @@ import { getDeviceId } from '../lib/deviceId';
 import { DamageIcon } from '../components/DamageIcon';
 import { pickFromGallery, takePhotoWithPicker, type PickedPhoto } from '../lib/photoPicker';
 import { ChangeLocationSheet, type LocationChoice } from '../components/ChangeLocationSheet';
+import { useToggleSet } from '../lib/useToggleSet';
 
 type Stage = 'capture' | 'classify' | 'submitting' | 'done';
 type LocationSource = 'gps' | 'exif' | 'address' | 'map';
@@ -51,6 +56,7 @@ export default function Report() {
   const [stage, setStage] = useState<Stage>('capture');
   const [photos, setPhotos] = useState<PickedPhoto[]>([]);
   const [damageType, setDamageType] = useState<DamageType | null>(null);
+  const servicesAffected = useToggleSet<ServiceType>();
   const [description, setDescription] = useState('');
   const [affectedCompany, setAffectedCompany] = useState('');
   const [gpsLocation, setGpsLocation] = useState<{
@@ -188,6 +194,7 @@ export default function Report() {
         });
       }
 
+      const services = Array.from(servicesAffected.values);
       const result = await submitReport({
         supabase,
         damageType,
@@ -198,6 +205,7 @@ export default function Report() {
         accuracyMeters: effectiveLocation.accuracy ?? undefined,
         deviceId,
         affectedCompany: affectedCompany.trim() || undefined,
+        servicesAffected: services.length > 0 ? services : undefined,
       });
 
       if (!result.ok) {
@@ -340,6 +348,40 @@ export default function Report() {
                 ]}
               >
                 {DAMAGE_TYPE_LABELS[type]}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <Text style={styles.label}>Services affected (optional)</Text>
+      <View style={styles.damageGrid}>
+        {(Object.keys(SERVICE_TYPE_LABELS) as ServiceType[]).map((type) => {
+          const active = servicesAffected.has(type);
+          return (
+            <Pressable
+              key={type}
+              onPress={() => servicesAffected.toggle(type)}
+              style={[
+                styles.damageChip,
+                active && {
+                  backgroundColor: SERVICE_TYPE_COLORS[type],
+                  borderColor: SERVICE_TYPE_COLORS[type],
+                },
+              ]}
+            >
+              <DamageIcon
+                name={SERVICE_TYPE_ICONS[type]}
+                size={16}
+                color={active ? '#fff' : T.text}
+              />
+              <Text
+                style={[
+                  styles.damageChipText,
+                  active && { color: '#fff' },
+                ]}
+              >
+                {SERVICE_TYPE_LABELS[type]}
               </Text>
             </Pressable>
           );
