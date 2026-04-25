@@ -7,16 +7,33 @@ authoritative for what's shipped — this file tracks only what's still open.
 
 ## Open — field app
 
-### Check on the queued EAS dev build
-An Android development client was queued on the free tier on 2026-04-19 from
-`apps/field-native`. Build URL is in the terminal history; also retrievable via
-`pnpm exec eas build:list`.
+### Wire FCM credentials so Android push actually delivers
+The dev-client APK installs and runs, but enabling proximity alerts errors
+with `Default FirebaseApp is not initialized` because `google-services.json`
+isn't bundled and EAS has no FCM v1 service-account key. Self-test (local)
+push works because that path doesn't go through Firebase.
 
-Once it completes:
-1. Download the APK and sideload.
-2. Run `pnpm app:dev-client` to verify push delivery end-to-end.
-3. Commit real app icons (currently commented out in `app.config.ts`) before
-   any production build.
+Steps:
+1. Firebase Console → create/pick project → Add app → Android → package
+   `com.clearwire.field` → register → download `google-services.json`.
+2. Drop the file at `apps/field-native/google-services.json` (gitignored).
+3. Firebase Console → Project settings → Service accounts → Generate new
+   private key → save JSON.
+4. Upload that service-account JSON to EAS via
+   https://expo.dev/accounts/clearwire/projects/clearwire-field/credentials
+   (Android → FCM V1 service account key).
+5. Then the assistant adds `googleServicesFile: './google-services.json'`
+   under `android` in `app.config.ts`, gitignores the file, and kicks a
+   fresh EAS dev-client build. Sideload → proximity push works.
+
+Reference: https://docs.expo.dev/push-notifications/fcm-credentials/
+
+### Real app icons before any production build
+Dev-client sideload is working and connects to Metro fine. Before kicking a
+production EAS build, commit real PNG/SVG app icons and uncomment the
+`icon`, `splash`, `adaptiveIcon`, and `favicon` references in
+`apps/field-native/app.config.ts` (currently commented out so the dev build
+prebuild step doesn't fail on missing assets).
 
 ### Service-type vs. damage-type on map pins (schema decision)
 The incidents map uses a single "damage type" field for both the physical

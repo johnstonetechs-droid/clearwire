@@ -1,4 +1,4 @@
-import type { ClearWireSupabase, DamageType } from '@clearwire/supabase';
+import type { ClearWireSupabase, DamageType, ServiceType } from '@clearwire/supabase';
 
 export interface SubmitReportPhoto {
   /** Local file URI of the photo — optional, used only for logging */
@@ -23,6 +23,8 @@ export interface SubmitReportInput {
   isTest?: boolean;
   /** Service provider affected by the damage (optional) */
   affectedCompany?: string;
+  /** Which services are disrupted (internet, cable_tv, etc.) — multi-select */
+  servicesAffected?: ServiceType[];
 }
 
 export interface SubmitReportResult {
@@ -51,6 +53,7 @@ export async function submitReport(
     deviceId,
     isTest = false,
     affectedCompany,
+    servicesAffected,
   } = input;
 
   if (!photos?.length) {
@@ -106,6 +109,7 @@ export async function submitReport(
     lat: latitude,
     lng: longitude,
     company: affectedCompany,
+    services: servicesAffected,
   });
 
   const insertRes = await supabase.rpc('insert_report', {
@@ -118,6 +122,7 @@ export async function submitReport(
     p_reporter_device_id: deviceId,
     p_is_test: isTest,
     p_affected_company: affectedCompany ?? null,
+    p_services_affected: servicesAffected ?? null,
   });
 
   console.log('[submitReport] insert result', {

@@ -40,6 +40,7 @@ export interface Report {
   is_test: boolean;
   verified_by_pro: boolean;
   affected_company: string | null;
+  services_affected: ServiceType[] | null;
 }
 
 export interface ProProfile {
@@ -147,6 +148,7 @@ export interface NearbyReport {
   verified_by_pro: boolean;
   affected_company: string | null;
   reporter_display_name: string | null;
+  services_affected: ServiceType[] | null;
 }
 
 export interface NearbyOutage {
