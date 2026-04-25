@@ -7,27 +7,6 @@ authoritative for what's shipped — this file tracks only what's still open.
 
 ## Open — field app
 
-### Wire FCM credentials so Android push actually delivers
-The dev-client APK installs and runs, but enabling proximity alerts errors
-with `Default FirebaseApp is not initialized` because `google-services.json`
-isn't bundled and EAS has no FCM v1 service-account key. Self-test (local)
-push works because that path doesn't go through Firebase.
-
-Steps:
-1. Firebase Console → create/pick project → Add app → Android → package
-   `com.clearwire.field` → register → download `google-services.json`.
-2. Drop the file at `apps/field-native/google-services.json` (gitignored).
-3. Firebase Console → Project settings → Service accounts → Generate new
-   private key → save JSON.
-4. Upload that service-account JSON to EAS via
-   https://expo.dev/accounts/clearwire/projects/clearwire-field/credentials
-   (Android → FCM V1 service account key).
-5. Then the assistant adds `googleServicesFile: './google-services.json'`
-   under `android` in `app.config.ts`, gitignores the file, and kicks a
-   fresh EAS dev-client build. Sideload → proximity push works.
-
-Reference: https://docs.expo.dev/push-notifications/fcm-credentials/
-
 ### Real app icons before any production build
 Dev-client sideload is working and connects to Metro fine. Before kicking a
 production EAS build, commit real PNG/SVG app icons and uncomment the
@@ -85,6 +64,10 @@ polish) from the prior roadmap are all done. Headline commits on
 - `d0a2da7` magic link sign-in + pro profile screen
 - `8206df9` + `c4aeb5f` + `2a46c0f` "My submissions" screen, edit-until-ack,
   landing-screen surfacing
+- FCM credentials wired: Firebase project `clearwire-14f0a`, Android app
+  `com.clearwire.field` registered, `google-services.json` bundled via
+  `googleServicesFile` in `app.config.ts`, FCM v1 service-account key
+  uploaded to EAS. Dev-client rebuild in progress.
 
 **Resolved schema questions:**
 - Additional photos → `text[]` column on `reports` (not a child table)
