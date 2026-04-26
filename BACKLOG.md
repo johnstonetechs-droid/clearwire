@@ -33,12 +33,14 @@ React Native Web) is worth considering only when drift becomes painful.
 
 ## Open — website
 
-- **SEO — site is client-side rendered.** Googlebot sees a near-empty HTML
-  shell because Vite + React renders after JS load. Options:
+- **SEO — site is client-side rendered.** Even with the metadata in
+  `index.html` (in-flight on `website/seo-metadata`), Googlebot still
+  sees an empty `<div id="root">` until JS loads. Remaining options:
     - Prerender.io or Vercel prerendering (easy)
     - Migrate to Next.js for real SSR/SSG (medium effort, big payoff)
-    - Rich metadata (Open Graph, JSON-LD, per-page title/description) as a
-      quick win regardless
+    - Per-page `<title>` / `<meta>` updates via something like
+      `react-helmet-async` (modest, doesn't fix the empty-shell issue
+      but improves multi-route SEO once routes exist)
 
 - **Search Console verification (post-merge of `website/robots-txt`).**
   After the robots.txt + root `vercel.json` PR ships, re-request indexing
@@ -79,3 +81,8 @@ polish) from the prior roadmap are all done. Headline commits on
   `vercel.json` forcing `X-Robots-Tag: index, follow` (`3c86b28`) to the
   clearwire.app root site. Open PR:
   https://github.com/johnstonetechs-droid/clearwire/pull/new/website/robots-txt
+- `website/seo-metadata` — replaces the placeholder root `index.html`
+  with real title, description, Open Graph, Twitter card, and JSON-LD
+  for SoftwareApplication + Organization (`5f338d3`). Open PR:
+  https://github.com/johnstonetechs-droid/clearwire/pull/new/website/seo-metadata
+  Follow-up: drop a real `og-image.png` (1200×630) into root `public/`.
