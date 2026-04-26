@@ -77,9 +77,10 @@ polish) from the prior roadmap are all done. Headline commits on
 - damage_type vs services_affected → split into two fields (commit `3227f56`)
 
 **In-flight branches off main (open PRs):**
-- `website/robots-txt` — adds `public/robots.txt` (`26e54e5`) and root
-  `vercel.json` forcing `X-Robots-Tag: index, follow` (`3c86b28`) to the
-  clearwire.app root site. Open PR:
+- `website/robots-txt` — adds `public/robots.txt` (`26e54e5`), root
+  `vercel.json` forcing `X-Robots-Tag: index, follow` (`3c86b28`), and
+  a single-URL `public/sitemap.xml` so the robots.txt Sitemap line
+  resolves (`a4b2330`). Open PR:
   https://github.com/johnstonetechs-droid/clearwire/pull/new/website/robots-txt
 - `website/seo-metadata` — replaces the placeholder root `index.html`
   with real title, description, Open Graph, Twitter card, and JSON-LD
